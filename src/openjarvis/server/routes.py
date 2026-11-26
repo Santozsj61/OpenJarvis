@@ -1184,12 +1184,14 @@ async def list_models(request: Request) -> ModelListResponse:
     # retain provider-qualified IDs owned by configured engines like LiteLLM or NIM.
     # Fall back to direct Ollama query only when the engine returns nothing.
     engine = request.app.state.engine
+    active_model = getattr(request.app.state, "model", "")
     all_ids = await asyncio.to_thread(engine.list_models)
     known_models = set(all_ids)
     model_ids = [
         m
         for m in all_ids
-        if not is_cloud_model(m)
+        if m == active_model
+        or not is_cloud_model(m)
         or _engine_key_for_model(engine, m) in ("litellm", "nim")
         or _local_engine_advertises(engine, m, known_models=known_models)
     ]
@@ -1205,8 +1207,7 @@ async def list_models(request: Request) -> ModelListResponse:
     # chatModels[0] when it has no stored preference, so without this the
     # picker lands on whatever the engine happens to list first (e.g. a 1B
     # model) instead of [intelligence] default_model.
-    active_model = getattr(request.app.state, "model", "")
-    if active_model and active_model in model_ids:
+    if active_model:
         model_ids = [active_model] + [m for m in model_ids if m != active_model]
 
     return ModelListResponse(
